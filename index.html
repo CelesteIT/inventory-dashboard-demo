@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Inventory Control · Odoo Stock Dashboard (Portfolio Demo)</title>
+<style>
+:root{--bg:#f4f3ef;--card:#fff;--line:#e3e1db;--ink:#1d1d1b;--ink2:#6b6a66;--ink3:#9a9892;--blue:#2a78d6;--orange:#e8692f;--good:#1f8a4c;--warn:#b7791f;--bad:#c0392b;--grid:#ecebe6}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 Inter,system-ui,-apple-system,Segoe UI,Arial,sans-serif}
+.wrap{max-width:1200px;margin:0 auto;padding:20px}
+.note{border:1px dashed var(--line);border-radius:8px;padding:8px 12px;color:var(--ink2);font-size:12.5px;background:#faf9f6}
+h1{font-size:24px;margin:18px 0 4px}.sub{color:var(--ink2);display:flex;justify-content:space-between;flex-wrap:wrap;gap:8px}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--good);margin-right:6px}
+.bar{display:flex;gap:10px;align-items:center;flex-wrap:wrap;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px;margin:16px 0}
+.seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}.seg button{border:0;background:#fff;padding:7px 12px;cursor:pointer;color:var(--ink2);font:inherit}.seg button.on{background:var(--ink);color:#fff}
+select,input{font:inherit;border:1px solid var(--line);border-radius:8px;padding:7px 10px;background:#fff;color:var(--ink)}
+.lbl{color:var(--ink3);font-size:12px}
+.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:16px}
+.k .t{color:var(--ink2);font-size:13px}.k .v{font-size:28px;font-weight:700;margin:4px 0}.k .s{color:var(--ink3);font-size:12px}
+.row{display:grid;grid-template-columns:1.5fr 1fr;gap:12px;margin-top:12px}
+h3{margin:0 0 2px;font-size:16px}.h3s{color:var(--ink2);font-size:12.5px;margin-bottom:10px}
+table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--ink2);font-weight:500;font-size:12.5px;padding:8px;border-bottom:1px solid var(--line)}td{padding:9px 8px;border-bottom:1px solid var(--grid)}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+.pill{display:inline-flex;align-items:center;gap:5px;border-radius:999px;padding:2px 9px;font-size:12px}
+.p-bad{background:#fbe9e7;color:#8f2a1f}.p-warn{background:#fdf3e1;color:#7a5212}.p-good{background:#e6f4ea;color:#17663a}.p-info{background:#e8f0fb;color:#1d4f8f}
+.meter{height:8px;background:var(--grid);border-radius:4px;overflow:hidden;width:110px;display:inline-block;vertical-align:middle}.meter i{display:block;height:100%;border-radius:4px}
+svg text{font-family:inherit}
+.tt{position:fixed;pointer-events:none;background:#1d1d1b;color:#fff;padding:7px 10px;border-radius:8px;font-size:12px;display:none;z-index:9}
+.foot{color:var(--ink3);font-size:12px;margin:18px 0}
+@media(max-width:900px){.kpis{grid-template-columns:repeat(2,1fr)}.row{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+<div class="note">Portfolio demo · <b>FreshCart Grocers</b> is a fictional company and all stock figures are generated sample data. In production this view reads live from Odoo (stock.quant, stock.picking, purchase.order) through a read-only API user.</div>
+<h1>Inventory Control · Odoo Stock Dashboard</h1>
+<div class="sub"><span>Stock levels, low-stock alerts, pending receipts and transfers across every warehouse and outlet.</span><span><span class="dot"></span>Last sync: just now · refreshes every 5 min</span></div>
+
+<div class="bar">
+ <div class="seg" id="wh"><button class="on" data-w="all">All locations</button><button data-w="DC">Central DC</button><button data-w="Outlets">Outlets</button></div>
+ <span class="lbl">Category</span><select id="cat"><option value="all">All categories</option></select>
+ <span class="lbl">Search</span><input id="q" placeholder="Product or SKU…">
+</div>
+
+<div class="kpis" id="kpis"></div>
+
+<div class="row">
+ <div class="card"><h3>Stock value by location</h3><div class="h3s">On-hand value at cost. Hover a bar for details.</div><svg id="chart" viewBox="0 0 640 245" width="100%"></svg></div>
+ <div class="card"><h3>Pending receipts (GRNs)</h3><div class="h3s">Confirmed purchase orders not yet received.</div><table><thead><tr><th>PO</th><th>Supplier</th><th>Due</th><th>Status</th></tr></thead><tbody id="grn"></tbody></table></div>
+</div>
+
+<div class="card" style="margin-top:12px">
+ <h3>Products needing attention</h3><div class="h3s">Below reorder point or out of stock. Sorted by days of cover, lowest first.</div>
+ <table><thead><tr><th>SKU</th><th>Product</th><th>Category</th><th>Location</th><th class="n">On hand</th><th class="n">Reorder pt</th><th>Cover</th><th>Status</th></tr></thead><tbody id="low"></tbody></table>
+</div>
+
+<div class="card" style="margin-top:12px">
+ <h3>Internal transfers in transit</h3><div class="h3s">DC → outlet transfers that are validated at the DC but not yet received at the outlet.</div>
+ <table><thead><tr><th>Reference</th><th>From</th><th>To</th><th class="n">Lines</th><th class="n">Value</th><th>Dispatched</th><th>Age</th></tr></thead><tbody id="trf"></tbody></table>
+</div>
+<div class="foot">Built with Python + Odoo XML-RPC on the backend and a lightweight web front end. Demo data only.</div>
+</div>
+<div class="tt" id="tt"></div>
+<script>
+let s=7;const r=()=>(s=(s*16807)%2147483647)/2147483647;
+const locs=[['Central DC','DC'],['Hillside','Outlets'],['Riverside','Outlets'],['Lake View','Outlets'],['Station Square','Outlets'],['Harbour Road','Outlets'],['Central Market','Outlets']];
+const cats=['Dairy','Bakery','Beverages','Produce','Pantry','Household','Frozen'];
+const names={Dairy:['Fresh Milk 1L','Greek Yogurt 500g','Cheddar Block 200g','Butter 250g'],Bakery:['Sourdough Loaf','Whole Wheat Bread','Croissant 4pk'],Beverages:['Orange Juice 1L','Sparkling Water 6pk','Iced Tea 500ml','Cold Brew 250ml'],Produce:['Bananas 1kg','Red Onions 1kg','Tomatoes 500g','Avocado 2pk'],Pantry:['Basmati Rice 5kg','Olive Oil 1L','Pasta Penne 500g','Peanut Butter 340g'],Household:['Dish Soap 750ml','Paper Towels 4pk','Laundry Liquid 2L'],Frozen:['Frozen Peas 1kg','Ice Cream Tub 1L','Fish Fingers 400g']};
+const prods=[];let n=1001;for(const c of cats)for(const p of names[c])prods.push({sku:'FC-'+(n++),name:p,cat:c,cost:+(1+r()*14).toFixed(2)});
+const stock=[];for(const [l,t] of locs)for(const p of prods){const rp=t==='DC'?Math.round(80+r()*120):Math.round(10+r()*25);let oh=Math.round(rp*(0.35+r()*2.1));if(r()<.025)oh=0;const daily=t==='DC'?rp/9:rp/6;stock.push({...p,loc:l,type:t,oh,rp,cover:oh/daily});}
+cats.forEach(c=>{const o=document.createElement('option');o.value=c;o.textContent=c;cat.appendChild(o)});
+const sup=['Green Valley Dairy','Hilltop Bakery Co.','Coastline Beverages','Sunrise Farms','Pantry Wholesale Ltd','CleanHome Supplies'];
+const grns=Array.from({length:7},(_,i)=>{const d=Math.round(r()*6)-2;return{po:'P0'+(4810+i*7),sup:sup[i%sup.length],due:d,late:d<0}}).sort((a,b)=>a.due-b.due);
+const trf=Array.from({length:6},(_,i)=>{const h=Math.round(2+r()*40);return{ref:'DC/INT/0'+(2290+i*3),to:locs[1+i%6][0],lines:Math.round(6+r()*30),val:Math.round(300+r()*2400),h}}).sort((a,b)=>b.h-a.h);
+const fmt=v=>'$'+v.toLocaleString('en-US',{maximumFractionDigits:0});
+let W='all';
+function rows(){const q=document.getElementById('q').value.toLowerCase(),c=cat.value;return stock.filter(x=>(W==='all'||x.type===W)&&(c==='all'||x.cat===c)&&(!q||x.name.toLowerCase().includes(q)||x.sku.toLowerCase().includes(q)))}
+function render(){const R=rows();const val=R.reduce((a,x)=>a+x.oh*x.cost,0);const low=R.filter(x=>x.oh>0&&x.oh<x.rp).length;const out=R.filter(x=>x.oh===0).length;
+const K=[['Stock value',fmt(val),'on hand, at cost'],['SKUs tracked',new Set(R.map(x=>x.sku)).size,R.length+' SKU-location rows'],['Below reorder',low,'need replenishment'],['Out of stock',out,'zero on hand'],['Pending GRNs',grns.length,grns.filter(g=>g.late).length+' overdue']];
+kpis.innerHTML=K.map(k=>`<div class="card k"><div class="t">${k[0]}</div><div class="v">${k[1]}</div><div class="s">${k[2]}</div></div>`).join('');
+const by=locs.filter(l=>W==='all'||l[1]===W).map(([l])=>({l,v:R.filter(x=>x.loc===l).reduce((a,x)=>a+x.oh*x.cost,0)}));const mx=Math.max(...by.map(b=>b.v),1);
+let g='';const H=200,top=12,left=52,bw=Math.min(60,(560/by.length)-18);for(let i=0;i<=4;i++){const y=top+H-H*i/4;g+=`<line x1="${left}" x2="630" y1="${y}" y2="${y}" stroke="#ecebe6"/><text x="${left-8}" y="${y+4}" text-anchor="end" font-size="11" fill="#9a9892">${fmt(mx*i/4/1000)}k</text>`}
+by.forEach((b,i)=>{const x=left+16+i*((630-left-16)/by.length);const h=H*b.v/mx;g+=`<path d="M${x},${top+H} v${-h+4} q0,-4 4,-4 h${bw-8} q4,0 4,4 v${h-4} z" fill="${b.l==='Central DC'?'#e8692f':'#2a78d6'}" data-t="${b.l}: ${fmt(b.v)}"/><text x="${x+bw/2}" y="${top+H+18}" text-anchor="middle" font-size="11" fill="#6b6a66">${b.l.replace(' Square',' Sq.').replace('Central Market','C. Market')}</text>`});
+chart.innerHTML=g;
+const L=R.filter(x=>x.oh<x.rp).sort((a,b)=>a.cover-b.cover).slice(0,10);
+low_.innerHTML=L.map(x=>{const pct=Math.min(100,x.oh/x.rp*100);const st=x.oh===0?'<span class="pill p-bad">● Out of stock</span>':x.cover<1?'<span class="pill p-warn">▲ Critical</span>':'<span class="pill p-info">↓ Reorder</span>';return`<tr><td>${x.sku}</td><td>${x.name}</td><td>${x.cat}</td><td>${x.loc}</td><td class="n">${x.oh}</td><td class="n">${x.rp}</td><td><span class="meter"><i style="width:${pct}%;background:${x.oh===0?'#c0392b':pct<40?'#e8692f':'#2a78d6'}"></i></span> <span class="lbl">${x.cover.toFixed(1)}d</span></td><td>${st}</td></tr>`}).join('')||'<tr><td colspan="8" class="lbl">Nothing below reorder point.</td></tr>';}
+const low_=document.getElementById('low');
+grn.innerHTML=grns.map(g=>`<tr><td>${g.po}</td><td>${g.sup}</td><td>${g.due<0?Math.abs(g.due)+'d overdue':g.due===0?'Today':'in '+g.due+'d'}</td><td>${g.late?'<span class="pill p-bad">● Overdue</span>':g.due===0?'<span class="pill p-warn">▲ Due today</span>':'<span class="pill p-good">✓ On track</span>'}</td></tr>`).join('');
+document.getElementById('trf').innerHTML=trf.map(t=>`<tr><td>${t.ref}</td><td>Central DC</td><td>${t.to}</td><td class="n">${t.lines}</td><td class="n">${fmt(t.val)}</td><td>${t.h<24?'Today':'Yesterday'}</td><td>${t.h>24?'<span class="pill p-warn">▲ '+t.h+'h</span>':'<span class="pill p-good">'+t.h+'h</span>'}</td></tr>`).join('');
+document.querySelectorAll('#wh button').forEach(b=>b.onclick=()=>{document.querySelectorAll('#wh button').forEach(x=>x.classList.remove('on'));b.classList.add('on');W=b.dataset.w;render()});
+cat.onchange=render;document.getElementById('q').oninput=render;
+chart.addEventListener('mousemove',e=>{const t=e.target.dataset&&e.target.dataset.t;if(t){tt.style.display='block';tt.textContent=t;tt.style.left=e.clientX+12+'px';tt.style.top=e.clientY+12+'px'}else tt.style.display='none'});chart.addEventListener('mouseleave',()=>tt.style.display='none');
+render();
+</script>
+</body>
+</html>
